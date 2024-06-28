@@ -1,60 +1,56 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-//import "hardhat/console.sol";
+contract CaliBuyAndSell {
+    address public owner;
+    mapping(address => uint256) public accountBalances;
 
-contract Assessment {
-    address payable public owner;
-    uint256 public balance;
+    event DiamondsDeposited(address indexed account, uint256 amount);
+    event DiamondsWithdrawn(address indexed account, uint256 amount);
 
-    event Deposit(uint256 amount);
-    event Withdraw(uint256 amount);
-
-    constructor(uint initBalance) payable {
-        owner = payable(msg.sender);
-        balance = initBalance;
+    constructor() {
+        owner = msg.sender;
     }
 
-    function getBalance() public view returns(uint256){
-        return balance;
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only contract owner can call this function");
+        _;
     }
 
-    function deposit(uint256 _amount) public payable {
-        uint _previousBalance = balance;
-
-        // make sure this is the owner
-        require(msg.sender == owner, "You are not the owner of this account");
-
-        // perform transaction
-        balance += _amount;
-
-        // assert transaction completed successfully
-        assert(balance == _previousBalance + _amount);
-
-        // emit the event
-        emit Deposit(_amount);
+    function depositDiamonds() external payable {
+        accountBalances[msg.sender] += msg.value;
+        emit DiamondsDeposited(msg.sender, msg.value);
     }
 
-    // custom error
-    error InsufficientBalance(uint256 balance, uint256 withdrawAmount);
+    function withdrawDiamonds(uint256 amount) external {
+        require(accountBalances[msg.sender] >= amount, "Insufficient balance");
+        accountBalances[msg.sender] -= amount;
+        payable(msg.sender).transfer(amount);
+        emit DiamondsWithdrawn(msg.sender, amount);
+    }
 
-    function withdraw(uint256 _withdrawAmount) public {
-        require(msg.sender == owner, "You are not the owner of this account");
-        uint _previousBalance = balance;
-        if (balance < _withdrawAmount) {
-            revert InsufficientBalance({
-                balance: balance,
-                withdrawAmount: _withdrawAmount
-            });
-        }
+    function transferDiamonds(address receiver, uint256 amount) external {
+        require(accountBalances[msg.sender] >= amount, "Insufficient balance");
+        accountBalances[msg.sender] -= amount;
+        accountBalances[receiver] += amount;
+        emit DiamondsDeposited(receiver, amount);
+        emit DiamondsWithdrawn(msg.sender, amount);
+    }
 
-        // withdraw the given amount
-        balance -= _withdrawAmount;
+    function sellAllBalance() external {
+        uint256 balance = accountBalances[msg.sender];
+        require(balance > 0, "No diamonds to sell");
+        accountBalances[msg.sender] = 0;
+        payable(msg.sender).transfer(balance);
+        emit DiamondsWithdrawn(msg.sender, balance);
+    }
 
-        // assert the balance is correct
-        assert(balance == (_previousBalance - _withdrawAmount));
+    function getBalance(address account) external view returns (uint256) {
+        return accountBalances[account];
+    }
 
-        // emit the event
-        emit Withdraw(_withdrawAmount);
+    // This function is for emergency use only, in case funds get stuck
+    function emergencyWithdraw() external onlyOwner {
+        payable(owner).transfer(address(this).balance);
     }
 }
